@@ -47,7 +47,7 @@ void * geraPedidos(void * arg){
 
 	/*falta o loop*/
 
-	/*falta o numero de serie*/
+	serial++;
 
 	if(rand() % 2 == 0){
 		gender='M';
@@ -58,7 +58,7 @@ void * geraPedidos(void * arg){
 
 	time= (rand() % maxUtilizacao)+1;
 
-    sprintf(message, "%d-%c-%d/", serial,gender,time);
+    sprintf(message, "%d-%c-%d-0/", serial,gender,time);
 
     messageLength=strlen(message)+1;
 
