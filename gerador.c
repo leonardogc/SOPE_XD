@@ -145,7 +145,7 @@ void * listenerThread(void * arg){
 			    pthread_mutex_unlock(&registry_mutex);
 
 			    messageLength= sprintf(message, "%lu-%c-%lu-%lu/",p,g,dur,rejections);
-			    write(writeFIFO,message,messageLength);
+			    write(writeFIFO,message,messageLength+1);
 
 			}
 
@@ -198,7 +198,7 @@ void * geraPedidos(void * arg){
 
 	messageLength= sprintf(message, "%d-%c-%d-0/", serial,gender,time);
 
-    write(writeFIFO,message,messageLength);
+    write(writeFIFO,message,messageLength+1);
 
     pthread_mutex_lock(&registry_mutex);
 
