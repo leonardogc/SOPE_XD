@@ -250,7 +250,7 @@ void listener()
                 valid = 0;
             }
 
-            write(rejected_queue, "0/", 2);
+            write(rejected_queue, "0-", 2);
         }
         else
         {
