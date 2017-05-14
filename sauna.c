@@ -14,9 +14,9 @@
 
 #define BUFFER_SIZE 1024
 
-#define RECEBIDO "RECEBIDO"
-#define SERVIDO "SERVIDO"
-#define REJEITADO "REJEITADO"
+#define RECEIVED "RECEBIDO"
+#define SERVED "SERVIDO"
+#define REJECTED "REJEITADO"
 
 unsigned int program_state = 0;
 
@@ -26,7 +26,7 @@ time_t start_inst;
 
 char PATH_REGISTRY_FILE[BUFFER_SIZE];
 char * PATH_REQUEST_QUEUE = "/tmp/entrada";
-char * PATH_REJECTED_QUEUE = "/tmp/rejeitados";
+char * PATH_REJECTED_QUEUE = "/tmp/REJECTEDs";
 
 typedef struct timespec timespec_t;
 
@@ -100,6 +100,7 @@ void signal_cleanup(int signo)
 void * thread_wait(void * msg)
 {
     timespec_t timespec;
+
     message_t * message = (message_t *) msg;
 
     clock_gettime(CLOCK_MONOTONIC, &timespec);
@@ -114,7 +115,7 @@ void * thread_wait(void * msg)
     clock_gettime(CLOCK_MONOTONIC, &timespec);
     message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
     message->tid = pthread_self();
-    message->tip = SERVIDO;
+    message->tip = SERVED;
 
     write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
                             message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
@@ -143,10 +144,11 @@ void listener()
 {
     fprintf(stdout, "Listening...\n");
 
+    timespec_t timespec;
+
     int valid = 1;
     while (valid)
     {
-        timespec_t timespec;
         message_t * message = (message_t *) malloc(sizeof(message_t));
 
         message->pid = this_process;
@@ -211,7 +213,7 @@ void listener()
         message_buffer[1] = '\0';
         unsigned long rejections = strtoul(message_buffer, NULL, 10);
 
-        message->tip = RECEBIDO;
+        message->tip = RECEIVED;
 
         pthread_mutex_lock(&registry_mutex);
 
@@ -254,7 +256,7 @@ void listener()
         {
             ++rejections;
 
-            message->tip = REJEITADO;
+            message->tip = REJECTED;
 
             clock_gettime(CLOCK_MONOTONIC, &timespec);
             message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
