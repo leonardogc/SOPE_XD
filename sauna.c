@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <limits.h>
 #include <errno.h>
@@ -69,10 +70,10 @@ void cleanup()
     }
 }
 
-void signal_cleanup(int signal)
+void signal_cleanup(int signo)
 {
     cleanup();
-
+    
     pthread_exit(NULL);
 }
 
@@ -201,7 +202,7 @@ void message_listener()
 
             if (pthread_create(&thread, NULL, wait_seat, (void *) message) != 0 || pthread_detach(thread) != 0)
             {
-                // Error message
+                fprintf(stderr, "Failed thread creation\n");
                 valid = 0;
             }
         }
@@ -236,10 +237,13 @@ void message_listener()
 int main(int argc, char ** argv)
 {
     struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler = signal_cleanup;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
     sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGQUIT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGTSTP, &sa, NULL);
+
     atexit(cleanup);
 
     if (argc != 2)
@@ -248,11 +252,11 @@ int main(int argc, char ** argv)
         return 0;
     }
 
-    snprintf(PATH_REGISTRY_FILE, BUFFER_SIZE, "/tmp/bal.%u", (unsigned int) this_process);
-
     this_process = getpid();
     this_thread = pthread_self();
     start_inst = time(NULL);
+
+    snprintf(PATH_REGISTRY_FILE, BUFFER_SIZE, "/tmp/bal.%u", (unsigned int) this_process);
 
     number_seats = strtoul(argv[1], NULL, 10);
 
@@ -316,5 +320,5 @@ int main(int argc, char ** argv)
 
     message_listener();
 
-    pthread_exit(NULL); // Might not be null
+    pthread_exit(NULL);
 }
