@@ -28,8 +28,6 @@ char PATH_REGISTRY_FILE[BUFFER_SIZE];
 char * PATH_REQUEST_QUEUE = "/tmp/entrada";
 char * PATH_REJECTED_QUEUE = "/tmp/rejeitados";
 
-typedef struct timespec timespec_t;
-
 typedef struct message_t
 {
     float inst;
@@ -99,21 +97,21 @@ void signal_cleanup(int signo)
 
 void * thread_wait(void * msg)
 {
-    timespec_t timespec;
+    struct timespec ts;
 
     message_t * message = (message_t *) msg;
 
-    clock_gettime(CLOCK_MONOTONIC, &timespec);
+    clock_gettime(CLOCK_MONOTONIC, &ts);
 
-    sleep((message->dur - ((timespec.tv_nsec / 1.0e6 - start_inst) - message->inst)) / 1.0e3);
+    sleep((message->dur - ((ts.tv_nsec / 1.0e6 - start_inst) - message->inst)) / 1.0e3);
 
     int write_bytes;
     char message_buffer[BUFFER_SIZE];
 
     pthread_mutex_lock(&registry_mutex);
 
-    clock_gettime(CLOCK_MONOTONIC, &timespec);
-    message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
     message->tid = pthread_self();
     message->tip = SERVED;
 
@@ -144,7 +142,7 @@ void listener()
 {
     fprintf(stdout, "Listening...\n");
 
-    timespec_t timespec;
+    struct timespec ts;
 
     int valid = 1;
     while (valid)
@@ -217,8 +215,8 @@ void listener()
 
         pthread_mutex_lock(&registry_mutex);
 
-        clock_gettime(CLOCK_MONOTONIC, &timespec);
-        message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
 
         write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
                                 message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
@@ -241,8 +239,8 @@ void listener()
             ++current_seats;
             current_gender = message->g;
 
-            clock_gettime(CLOCK_MONOTONIC, &timespec);
-            message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
 
             if (pthread_create(&thread, NULL, thread_wait, (void *) message) != 0 || pthread_detach(thread) != 0)
             {
@@ -258,8 +256,8 @@ void listener()
 
             message->tip = REJECTED;
 
-            clock_gettime(CLOCK_MONOTONIC, &timespec);
-            message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
 
             write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
                                     message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
@@ -292,6 +290,7 @@ void listener()
 int main(int argc, char ** argv)
 {
     struct sigaction sa;
+    
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = signal_cleanup;
     sigaction(SIGINT, &sa, NULL);
@@ -317,7 +316,7 @@ int main(int argc, char ** argv)
 
     if (number_seats == 0 || number_seats == ULONG_MAX)
     {
-        fprintf(stderr, "Invalid argument! Must be an integer greater than 0 and lesser than");
+        fprintf(stderr, "Invalid argument! Must be an integer greater than 0 and lesser than %lu", ULONG_MAX);
         return 1; // Runtime error - user failure
     }
 
