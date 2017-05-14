@@ -66,7 +66,7 @@ void cleanup()
     if (received_messages_total > 0)
     {
         char message_buffer[BUFFER_SIZE];
-        int write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%lu-F:%lu-M:%lu\n%lu-F:%lu-M:%lu\n%lu-F:%lu-M:%lu\n",
+        int write_bytes = snprintf(message_buffer, BUFFER_SIZE, "Received:%lu-F:%lu-M:%lu\nRejected:%lu-F:%lu-M:%lu\nServed:%lu-F:%lu-M:%lu\n",
                 received_messages_total, received_messages_F, received_messages_M,
                 rejected_messages_total, rejected_messages_F, rejected_messages_M,
                 served_messages_total, served_messages_F, served_messages_M);
