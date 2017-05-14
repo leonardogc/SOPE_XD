@@ -42,6 +42,16 @@ typedef struct message_t
 }
 message_t;
 
+unsigned long received_messages_total = 0;
+unsigned long received_messages_F = 0;
+unsigned long received_messages_M = 0;
+unsigned long served_messages_total = 0;
+unsigned long served_messages_F = 0;
+unsigned long served_messages_M = 0;
+unsigned long rejected_messages_total = 0;
+unsigned long rejected_messages_F = 0;
+unsigned long rejected_messages_M = 0;
+
 unsigned long number_seats;
 unsigned long current_seats = 0;
 char current_gender = '\0';
@@ -50,10 +60,21 @@ int registry_file;
 int request_queue;
 int rejected_queue;
 
+pthread_cond_t seats_cond_var = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t registry_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void cleanup()
 {
+    if (received_messages_total > 0)
+    {
+        char message_buffer[BUFFER_SIZE];
+        int write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%lu-F:%lu-M:%lu\n%lu-F:%lu-M:%lu\n%lu-F:%lu-M:%lu\n",
+                received_messages_total, received_messages_F, received_messages_M,
+                rejected_messages_total, rejected_messages_F, rejected_messages_M,
+                served_messages_total, served_messages_F, served_messages_M);
+        write(registry_file, message_buffer, write_bytes);
+    }
+
     switch(program_state)
     {
         case 5:
@@ -66,7 +87,6 @@ void cleanup()
             unlink(PATH_REQUEST_QUEUE);
         case 1:
             close(registry_file);
-            unlink(PATH_REGISTRY_FILE);
     }
 }
 
@@ -96,15 +116,22 @@ void * thread_wait(void * msg)
     message->tid = pthread_self();
     message->tip = SERVIDO;
 
-    write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%.2f-%lu-%lu-%lu:%c-%u-%s\n", message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
-    write_bytes = write(registry_file, message_buffer, write_bytes);
+    write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
+                            message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
+    write(registry_file, message_buffer, write_bytes);
+
+    ++served_messages_total;
+    if (message->g == 'F')
+        ++served_messages_F;
+    else
+        ++served_messages_M;
 
     if (--current_seats == 0)
-    {
         current_gender = '\0';
-    }
 
     pthread_mutex_unlock(&registry_mutex);
+
+    pthread_cond_signal(&seats_cond_var);
 
     free(message);
 
@@ -191,13 +218,24 @@ void listener()
         clock_gettime(CLOCK_MONOTONIC, &timespec);
         message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
-        write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%.2f-%lu-%lu-%lu:%c-%u-%s\n", message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
-        write_bytes = write(registry_file, message_buffer, write_bytes);
+        write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
+                                message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
+        write(registry_file, message_buffer, write_bytes);
 
-        if (current_seats + 1 <= number_seats && (current_gender == message->g || current_gender == '\0'))
+        ++received_messages_total;
+        if (message->g == 'F')
+            ++received_messages_F;
+        else
+            ++received_messages_M;
+
+        if (current_gender == message->g || current_gender == '\0')
         {
             pthread_t thread;
 
+            while (current_seats == number_seats)
+            {
+                pthread_cond_wait(&seats_cond_var, &registry_mutex);
+            }
             ++current_seats;
             current_gender = message->g;
 
@@ -209,6 +247,8 @@ void listener()
                 fprintf(stderr, "Failed thread creation\n");
                 valid = 0;
             }
+
+            write(rejected_queue, "0/", 2);
         }
         else
         {
@@ -219,8 +259,15 @@ void listener()
             clock_gettime(CLOCK_MONOTONIC, &timespec);
             message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
-            write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%.2f-%lu-%lu-%lu:%c-%u-%s\n", message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
+            write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
+                                    message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
             write(registry_file, message_buffer, write_bytes);
+
+            ++rejected_messages_total;
+            if (message->g == 'F')
+                ++rejected_messages_F;
+            else
+                ++rejected_messages_M;
 
             write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%lu-%c-%u-%lu/", message->p, message->g, message->dur, rejections);
             write_bytes = write(rejected_queue, message_buffer, write_bytes);
