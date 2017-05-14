@@ -1,10 +1,14 @@
 #include <stdio.h>
+#include <limits.h>
+#include <time.h>
+#include <errno.h>
+#include <stdlib.h>
+
 #include <unistd.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <time.h>
-#include <stdlib.h>
 
 #define BUFFER_SIZE 1024
 
@@ -32,7 +36,6 @@ int pedidosDescartadosHomem=0;
 int pedidosDescartadosMulher=0;
 
 void * listenerThread(void * arg){
-	int fd;
 	float inst;
 	unsigned long counter = 0;
 	unsigned long p;
@@ -50,7 +53,6 @@ void * listenerThread(void * arg){
 		unsigned int buffer_pos = 0;
 
 		int read_bytes;
-		int write_bytes;
 		char message_buffer[BUFFER_SIZE];
 
 		do
@@ -59,10 +61,12 @@ void * listenerThread(void * arg){
 			if (read_bytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 			{
 				// Call would block (maybe wait a bit?)
+				fprintf(stdout, "foo");
 				continue;
 			}
 			else if (read_bytes > 0)
 			{
+				fprintf(stdout, "bar");
 				// Successfull call
 			}
 		}
@@ -115,7 +119,7 @@ void * listenerThread(void * arg){
 			    clock_gettime(CLOCK_MONOTONIC, &timespec);
 			    inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
-			    fprintf(file,"%-10.2f – %-10d – %-10d: %-1c – %-10d – %-15s\n", inst, (int)getpid(), p , g, dur,"DESCARTADO");
+			    fprintf(file,"%-10.2f - %-10d - %-10lu:%-1c - %-10lu - %-15s\n", inst, (int)getpid(), p , g, dur,"DESCARTADO");
 
 			    pthread_mutex_unlock(&registry_mutex);
 
@@ -134,7 +138,7 @@ void * listenerThread(void * arg){
 			    clock_gettime(CLOCK_MONOTONIC, &timespec);
 			    inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
-			    fprintf(file,"%-10.2f – %-10d – %-10d: %-1c – %-10d – %-15s\n", inst, (int)getpid(), p , g, dur,"REJEITADO");
+			    fprintf(file,"%-10.2f - %-10d - %-10lu:%-1c - %-10lu - %-15s\n", inst, (int)getpid(), p , g, dur,"REJEITADO");
 
 			    pthread_mutex_unlock(&registry_mutex);
 
@@ -147,6 +151,8 @@ void * listenerThread(void * arg){
 	}
 	close(writeFIFO);
 	close(readFIFO);
+	unlink(PATH_REQUEST_QUEUE);
+	unlink(PATH_REJECTED_QUEUE);
 
 	 pthread_mutex_lock(&registry_mutex);
 
@@ -155,7 +161,7 @@ void * listenerThread(void * arg){
 			 pedidosRejeitadosHomem+pedidosRejeitadosMulher,pedidosRejeitadosMulher,pedidosRejeitadosHomem,
 			 pedidosDescartadosHomem+pedidosDescartadosMulher,pedidosDescartadosMulher,pedidosDescartadosHomem);
 
-	 close(file);
+	 fclose(file);
 
 	 pthread_mutex_unlock(&registry_mutex);
 
@@ -164,7 +170,6 @@ void * listenerThread(void * arg){
 
 void * geraPedidos(void * arg){
 	srand(time(NULL));
-	int fd;
 	int time;
 	int serial=0;
 	float inst;
@@ -198,7 +203,7 @@ void * geraPedidos(void * arg){
     clock_gettime(CLOCK_MONOTONIC, &timespec);
     inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
-    fprintf(file,"%-10.2f – %-10d – %-10d: %-1c – %-10d – %-15s\n", inst, (int)getpid(), serial , gender, time,"PEDIDO");
+    fprintf(file,"%-10.2f - %-10d - %-10d:%-1c - %-10d - %-15s\n", inst, (int) getpid(), serial, gender, time,"PEDIDO");
 
     pthread_mutex_unlock(&registry_mutex);
 
@@ -219,11 +224,11 @@ void * geraPedidos(void * arg){
 
 int main(int argc, char ** argv){
 
-	start_inst = time(NULL);
+	start_inst = time(NULL) * 1000;
 
 	if (argc != 3)
 	    {
-	        fprintf(stdout, "Usage: ./sauna <no. of seats>\n");
+	        fprintf(stdout, "Usage: ./gerador <n. pedidos> <max. utilizaÃ§Ã£o>\n");
 	        return 0;
 	    }
 
@@ -232,18 +237,18 @@ int main(int argc, char ** argv){
 
 	    if (numPedidos == 0 || numPedidos == ULONG_MAX || maxUtilizacao == 0 || maxUtilizacao == ULONG_MAX)
 	    {
-	        fprintf(stderr, "Invalid argument! Must be an integer greater than 0 and lesser than");
+	        fprintf(stderr, "Invalid argument! Must be an integer greater than 0 and lesser than %lu", ULONG_MAX);
 	        return 1; // Runtime error - user failure
 	    }
 
-	char* filename;
-	sprintf(filename,"ger.%d",(int)getpid());
+	char filename[BUFFER_SIZE];
+	sprintf(filename,"/tmp/ger.%d",(int)getpid());
 	file=fopen(filename,"w");
 
 	pthread_t ta, tb;
-
-	readFIFO= open (PATH_REJECTED_QUEUE, O_RDONLY);
-	writeFIFO= open (PATH_REQUEST_QUEUE,O_WRONLY);
+	
+	writeFIFO = open(PATH_REQUEST_QUEUE, O_WRONLY);
+	readFIFO = open(PATH_REJECTED_QUEUE, O_RDONLY);
 
 	pthread_create(&ta, NULL, geraPedidos, NULL);
 	pthread_create(&tb, NULL, listenerThread, NULL);
