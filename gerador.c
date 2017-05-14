@@ -8,6 +8,7 @@
 
 int numPedidos=10;
 int maxUtilizacao=10000;
+FILE * file;
 
 /*
 ssize_t read (int fd, char * buf, int count);
@@ -16,16 +17,17 @@ ssize_t write (int fd, char * buf, int count);
 
 void * listenerThread(void * arg){
 	int fd;
+	int n;
 	char str[100];
 
-	fd= open (/*const char *filename*/, O_RDONLY);
+	//fd= open (/*const char *filename*/, O_RDONLY);
 
-	do{
+	/*do{
 
 	n = read(fd,str,1);
 
 	}
-	while (n>0 && *str++ != '\0');
+	while (n>0 && *(str++) != '\0');*/
 
 
  return NULL;
@@ -41,7 +43,7 @@ void * geraPedidos(void * arg){
 	char gender;
 
 
-     fd= open (/*const char *filename*/,O_WRONLY);
+   //  fd= open (/*const char *filename*/,O_WRONLY);
 
 	/*falta o loop*/
 
@@ -62,19 +64,24 @@ void * geraPedidos(void * arg){
 
     write(fd,message,messageLength);
 
+    fprintf(file,"%-10.2f – %-10d – %-10d: %-1c – %-10d – %-15s\n", inst, getpid(), serial , gender, time,"PEDIDO");
+
 
  return NULL;
 }
 
 
 int main(){
-pthread_t ta, tb;
+	char* filename;
+	sprintf(filename,"ger.%d",getpid());
+	file=fopen(filename,"w");
 
-pthread_create(&ta, NULL, geraPedidos, NULL);
-pthread_create(&tb, NULL, listenerThread, NULL);
-pthread_join(ta, NULL);
-pthread_join(tb, NULL);
+	pthread_t ta, tb;
 
+	pthread_create(&ta, NULL, geraPedidos, NULL);
+	pthread_create(&tb, NULL, listenerThread, NULL);
+	pthread_join(ta, NULL);
+	pthread_join(tb, NULL);
 
- return 0;
+	return 0;
 }
