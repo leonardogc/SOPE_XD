@@ -26,7 +26,7 @@ time_t start_inst;
 
 char PATH_REGISTRY_FILE[BUFFER_SIZE];
 char * PATH_REQUEST_QUEUE = "/tmp/entrada";
-char * PATH_REJECTED_QUEUE = "/tmp/REJECTEDs";
+char * PATH_REJECTED_QUEUE = "/tmp/rejeitados";
 
 typedef struct timespec timespec_t;
 
