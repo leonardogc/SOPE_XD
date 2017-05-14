@@ -77,7 +77,7 @@ void signal_cleanup(int signo)
     pthread_exit(NULL);
 }
 
-void * wait_seat(void * msg)
+void * thread_wait(void * msg)
 {
     timespec_t timespec;
     message_t * message = (message_t *) msg;
@@ -112,7 +112,7 @@ void * wait_seat(void * msg)
     return NULL; // Actually meaningless call, only to remove warning/error
 }
 
-void message_listener()
+void listener()
 {
     fprintf(stdout, "Listening...\n");
 
@@ -175,10 +175,14 @@ void message_listener()
                 break;
             }
         }
-        while (message_buffer[buffer_pos] != '/' ? (++buffer_pos, 1) : 0);
+        while (message_buffer[buffer_pos] != '-' ? (++buffer_pos, 1) : 0);
         if (!valid) break;
         message_buffer[buffer_pos] = '\0';
         message->dur = strtoul(message_buffer, NULL, 10);
+
+        read(request_queue, message_buffer, 2);
+        message_buffer[1] = '\0';
+        unsigned long rejections = strtoul(message_buffer, NULL, 10);
 
         message->tip = RECEBIDO;
 
@@ -200,7 +204,7 @@ void message_listener()
             clock_gettime(CLOCK_MONOTONIC, &timespec);
             message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
-            if (pthread_create(&thread, NULL, wait_seat, (void *) message) != 0 || pthread_detach(thread) != 0)
+            if (pthread_create(&thread, NULL, thread_wait, (void *) message) != 0 || pthread_detach(thread) != 0)
             {
                 fprintf(stderr, "Failed thread creation\n");
                 valid = 0;
@@ -208,6 +212,8 @@ void message_listener()
         }
         else
         {
+            ++rejections;
+
             message->tip = REJEITADO;
 
             clock_gettime(CLOCK_MONOTONIC, &timespec);
@@ -216,7 +222,7 @@ void message_listener()
             write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%.2f-%lu-%lu-%lu:%c-%u-%s\n", message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
             write(registry_file, message_buffer, write_bytes);
 
-            write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%lu-%c-%u/", message->p, message->g, message->dur);
+            write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%lu-%c-%u-%lu/", message->p, message->g, message->dur, rejections);
             write_bytes = write(rejected_queue, message_buffer, write_bytes);
             if (write_bytes <= 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
             {
@@ -318,7 +324,7 @@ int main(int argc, char ** argv)
 
     fprintf(stdout, "Finished initializing...\n");
 
-    message_listener();
+    listener();
 
     pthread_exit(NULL);
 }
