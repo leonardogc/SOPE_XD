@@ -73,15 +73,16 @@ void * listenerThread(void * arg){
 		while (message_buffer[buffer_pos] != '-' ? (++buffer_pos, 1) : 0);
 
 		message_buffer[buffer_pos] = '\0';
-		p = strtoul(message_buffer, NULL, 10);
+		p = strtoul(&message_buffer[0], NULL, 10);
 
 		if(p==0){
 			counter++;
 		}
 		else{
-
-			read(readFIFO, message_buffer, 2);
-			g = message_buffer[buffer_pos = 0];
+			read(readFIFO, &message_buffer[0], 2);
+			g = message_buffer[0];
+			
+			buffer_pos=0;
 
 			do
 			{
@@ -99,11 +100,12 @@ void * listenerThread(void * arg){
 			while (message_buffer[buffer_pos] != '-' ? (++buffer_pos, 1) : 0);
 
 			message_buffer[buffer_pos] = '\0';
-			dur = strtoul(message_buffer, NULL, 10);
+			dur = strtoul(&message_buffer[0], NULL, 10);
+			
 
-			read(readFIFO, message_buffer, 2);
+			read(readFIFO, &message_buffer[0], 2);
 			message_buffer[1] = '\0';
-			rejections = strtoul(message_buffer, NULL, 10);
+			rejections = strtoul(&message_buffer[0], NULL, 10);
 
 			if(rejections>=3){
 				counter++;
