@@ -2,8 +2,10 @@
 #include <stdlib.h>
 #include <time.h>
 #include <limits.h>
+#include <errno.h>
 
 #include <unistd.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/types.h>
@@ -15,9 +17,15 @@
 #define SERVIDO "SERVIDO"
 #define REJEITADO "REJEITADO"
 
+unsigned int program_state = 0;
+
 pid_t this_process;
 pthread_t this_thread;
 time_t start_inst;
+
+char PATH_REGISTRY_FILE[BUFFER_SIZE];
+char * PATH_REQUEST_QUEUE = "/tmp/entrada";
+char * PATH_REJECTED_QUEUE = "/tmp/rejeitados";
 
 typedef struct timespec timespec_t;
 
@@ -33,11 +41,40 @@ typedef struct message_t
 }
 message_t;
 
+unsigned long number_seats;
 unsigned long current_seats = 0;
 char current_gender = '\0';
 
 int registry_file;
+int request_queue;
+int rejected_queue;
+
 pthread_mutex_t registry_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void cleanup()
+{
+    switch(program_state)
+    {
+        case 5:
+            close(rejected_queue);
+        case 4:
+            close(request_queue);
+        case 3:
+            unlink(PATH_REJECTED_QUEUE);
+        case 2:
+            unlink(PATH_REQUEST_QUEUE);
+        case 1:
+            close(registry_file);
+            unlink(PATH_REGISTRY_FILE);
+    }
+}
+
+void signal_cleanup(int signal)
+{
+    cleanup();
+
+    pthread_exit(NULL);
+}
 
 void * wait_seat(void * msg)
 {
@@ -74,9 +111,9 @@ void * wait_seat(void * msg)
     return NULL; // Actually meaningless call, only to remove warning/error
 }
 
-void message_listener(unsigned long const number_seats, int const request_queue, int const rejected_queue)
+void message_listener()
 {
-    fprintf(stdout, "Listening...");
+    fprintf(stdout, "Listening...\n");
 
     int valid = 1;
     while (valid)
@@ -159,7 +196,7 @@ void message_listener(unsigned long const number_seats, int const request_queue,
             ++current_seats;
             current_gender = message->g;
 
-            clock_gettime(CLOCK_MONOTONIC, &ts);
+            clock_gettime(CLOCK_MONOTONIC, &timespec);
             message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
             if (pthread_create(&thread, NULL, wait_seat, (void *) message) != 0 || pthread_detach(thread) != 0)
@@ -172,7 +209,7 @@ void message_listener(unsigned long const number_seats, int const request_queue,
         {
             message->tip = REJEITADO;
 
-            clock_gettime(CLOCK_MONOTONIC, &ts);
+            clock_gettime(CLOCK_MONOTONIC, &timespec);
             message->inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
             write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%.2f-%lu-%lu-%lu:%c-%u-%s\n", message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
@@ -198,21 +235,26 @@ void message_listener(unsigned long const number_seats, int const request_queue,
 
 int main(int argc, char ** argv)
 {
+    struct sigaction sa;
+    sa.sa_handler = signal_cleanup;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+    atexit(cleanup);
+
     if (argc != 2)
     {
         fprintf(stdout, "Usage: ./sauna <no. of seats>\n");
         return 0;
     }
 
+    snprintf(PATH_REGISTRY_FILE, BUFFER_SIZE, "/tmp/bal.%u", (unsigned int) this_process);
+
     this_process = getpid();
     this_thread = pthread_self();
     start_inst = time(NULL);
 
-    char PATH_REGISTRY_FILE[BUFFER_SIZE]; snprintf(PATH_REGISTRY_FILE, BUFFER_SIZE, "/tmp/bal.%u", (unsigned int) this_process);
-    char const * PATH_REQUEST_QUEUE = "/tmp/entrada";
-    char const * PATH_REJECTED_QUEUE = "/tmp/rejeitados";
-
-    unsigned long const number_seats = strtoul(argv[1], NULL, 10);
+    number_seats = strtoul(argv[1], NULL, 10);
 
     if (number_seats == 0 || number_seats == ULONG_MAX)
     {
@@ -220,49 +262,59 @@ int main(int argc, char ** argv)
         return 1; // Runtime error - user failure
     }
 
-    fprintf(stdout, "Initializing...");
+    fprintf(stdout, "Initializing...\n");
 
     registry_file = open(PATH_REGISTRY_FILE, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 
     if (registry_file == -1)
     {
-        fprintf(stderr, "Failed text file creation!");
+        fprintf(stderr, "Failed text file creation!\n");
         return 2; // Runtime error - program failure
     }
 
+    ++program_state;
+
     if (mkfifo(PATH_REQUEST_QUEUE, S_IRUSR | S_IWUSR | S_IXUSR) == -1)
     {
-        fprintf(stderr, "Failed named pipe creation!");
+        fprintf(stderr, "Failed named pipe creation!\n");
         return 2;
     }
+
+    ++program_state;
 
     if (mkfifo(PATH_REJECTED_QUEUE, S_IRUSR | S_IWUSR | S_IXUSR) == -1)
     {
-        fprintf(stderr, "Failed named pipe creation!");
+        fprintf(stderr, "Failed named pipe creation!\n");
         return 2;
     }
 
-    int const request_queue = open(PATH_REQUEST_QUEUE, O_RDONLY);
+    ++program_state;
+
+    request_queue = open(PATH_REQUEST_QUEUE, O_RDONLY);
     if (request_queue == -1)
     {
-        fprintf(stderr, "Failed named pipe opening!");
+        fprintf(stderr, "Failed named pipe opening!\n");
         return 2;
     }
     int FLAGS = fcntl(request_queue, F_GETFL);
     fcntl(request_queue, F_SETFL, FLAGS | O_NONBLOCK);
 
-    int const rejected_queue = open(PATH_REJECTED_QUEUE, O_WRONLY);
+    ++program_state;
+
+    rejected_queue = open(PATH_REJECTED_QUEUE, O_WRONLY);
     if (rejected_queue == -1)
     {
-        fprintf(stderr, "Failed named pipe opening!");
+        fprintf(stderr, "Failed named pipe opening!\n");
         return 2;
     }
     FLAGS = fcntl(rejected_queue, F_GETFL);
     fcntl(rejected_queue, F_SETFL, FLAGS | O_NONBLOCK);
 
-    fprintf(stdout, "Finished initializing...");
+    ++program_state;
 
-    message_listener(number_seats, request_queue, rejected_queue);
+    fprintf(stdout, "Finished initializing...\n");
+
+    message_listener();
 
     pthread_exit(NULL); // Might not be null
 }
