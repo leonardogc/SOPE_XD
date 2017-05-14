@@ -54,7 +54,7 @@ unsigned long number_seats;
 unsigned long current_seats = 0;
 char current_gender = '\0';
 
-int registry_file;
+FILE * registry_file;
 int request_queue;
 int rejected_queue;
 
@@ -65,12 +65,10 @@ void cleanup()
 {
     if (received_messages_total > 0)
     {
-        char message_buffer[BUFFER_SIZE];
-        int write_bytes = snprintf(message_buffer, BUFFER_SIZE, "Received:%lu-F:%lu-M:%lu\nRejected:%lu-F:%lu-M:%lu\nServed:%lu-F:%lu-M:%lu\n",
+        fprintf(registry_file, "Received:%lu-F:%lu-M:%lu\nRejected:%lu-F:%lu-M:%lu\nServed:%lu-F:%lu-M:%lu\n",
                 received_messages_total, received_messages_F, received_messages_M,
                 rejected_messages_total, rejected_messages_F, rejected_messages_M,
                 served_messages_total, served_messages_F, served_messages_M);
-        write(registry_file, message_buffer, write_bytes);
     }
 
     switch(program_state)
@@ -84,7 +82,7 @@ void cleanup()
         case 2:
             unlink(PATH_REQUEST_QUEUE);
         case 1:
-            close(registry_file);
+            fclose(registry_file);
     }
 }
 
@@ -105,9 +103,6 @@ void * thread_wait(void * msg)
 
     sleep((message->dur - ((ts.tv_nsec / 1.0e6 - start_inst) - message->inst)) / 1.0e3);
 
-    int write_bytes;
-    char message_buffer[BUFFER_SIZE];
-
     pthread_mutex_lock(&registry_mutex);
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -115,9 +110,8 @@ void * thread_wait(void * msg)
     message->tid = pthread_self();
     message->tip = SERVED;
 
-    write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
-                            message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
-    write(registry_file, message_buffer, write_bytes);
+    fprintf(registry_file, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
+            message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
 
     ++served_messages_total;
     if (message->g == 'F')
@@ -160,17 +154,7 @@ void listener()
 
         do
         {
-            read_bytes = read(request_queue, &message_buffer[buffer_pos], 1);
-            if (read_bytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-            {
-                // Call would block (maybe wait a bit?)
-                continue;
-            }
-            else if (read_bytes > 0)
-            {
-                // Successfull call
-            }
-            else
+            if (read(request_queue, &message_buffer[buffer_pos], 1) == 0)
             {
                 valid = 0; // FIFO write-side closed
                 break;
@@ -181,22 +165,16 @@ void listener()
         message_buffer[buffer_pos] = '\0';
         message->p = strtoul(message_buffer, NULL, 10);
 
+        fprintf(stdout, "%lu\n", message->p);
+
         read(request_queue, message_buffer, 2);
         message->g = message_buffer[buffer_pos = 0];
 
+        fprintf(stdout, "%c\n", message->g);
+
         do
         {
-            read_bytes = read(request_queue, &message_buffer[buffer_pos], 1);
-            if (read_bytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-            {
-                // Call would block (maybe wait a bit?)
-                continue;
-            }
-            else if (read_bytes > 0)
-            {
-                // Successfull call
-            }
-            else
+            if (read(request_queue, &(message_buffer[buffer_pos]), 1) == 0)
             {
                 valid = 0; // FIFO write-side closed
                 break;
@@ -207,9 +185,13 @@ void listener()
         message_buffer[buffer_pos] = '\0';
         message->dur = strtoul(message_buffer, NULL, 10);
 
+        fprintf(stdout, "%u\n", message->dur);
+
         read(request_queue, message_buffer, 2);
         message_buffer[1] = '\0';
         unsigned long rejections = strtoul(message_buffer, NULL, 10);
+
+        fprintf(stdout, "%lu\n", rejections);
 
         message->tip = RECEIVED;
 
@@ -218,9 +200,8 @@ void listener()
         clock_gettime(CLOCK_MONOTONIC, &ts);
         message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
 
-        write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
-                                message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
-        write(registry_file, message_buffer, write_bytes);
+        fprintf(registry_file, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
+                message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
 
         ++received_messages_total;
         if (message->g == 'F')
@@ -259,9 +240,8 @@ void listener()
             clock_gettime(CLOCK_MONOTONIC, &ts);
             message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
 
-            write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
-                                    message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
-            write(registry_file, message_buffer, write_bytes);
+            fprintf(registry_file, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
+                    message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
 
             ++rejected_messages_total;
             if (message->g == 'F')
@@ -271,14 +251,14 @@ void listener()
 
             write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%lu-%c-%u-%lu/", message->p, message->g, message->dur, rejections);
             write_bytes = write(rejected_queue, message_buffer, write_bytes);
-            if (write_bytes <= 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+/*            if (write_bytes <= 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
             {
                 valid = 0; // FIFO read-side closed
             }
             else
             {
                 // Successfull call
-            }
+            }*/
 
             free(message);
         }
@@ -308,7 +288,7 @@ int main(int argc, char ** argv)
 
     this_process = getpid();
     this_thread = pthread_self();
-    start_inst = time(NULL);
+    start_inst = time(NULL) * 1.0e3;
 
     snprintf(PATH_REGISTRY_FILE, BUFFER_SIZE, "/tmp/bal.%u", (unsigned int) this_process);
 
@@ -322,9 +302,9 @@ int main(int argc, char ** argv)
 
     fprintf(stdout, "Initializing...\n");
 
-    registry_file = open(PATH_REGISTRY_FILE, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+    registry_file = fopen(PATH_REGISTRY_FILE, "w");
 
-    if (registry_file == -1)
+    if (registry_file == NULL)
     {
         fprintf(stderr, "Failed text file creation!\n");
         return 2; // Runtime error - program failure
@@ -354,8 +334,8 @@ int main(int argc, char ** argv)
         fprintf(stderr, "Failed named pipe opening!\n");
         return 2;
     }
-    int FLAGS = fcntl(request_queue, F_GETFL);
-    fcntl(request_queue, F_SETFL, FLAGS | O_NONBLOCK);
+//    int FLAGS = fcntl(request_queue, F_GETFL);
+//    fcntl(request_queue, F_SETFL, FLAGS | O_NONBLOCK);
 
     ++program_state;
 
@@ -365,8 +345,8 @@ int main(int argc, char ** argv)
         fprintf(stderr, "Failed named pipe opening!\n");
         return 2;
     }
-    FLAGS = fcntl(rejected_queue, F_GETFL);
-    fcntl(rejected_queue, F_SETFL, FLAGS | O_NONBLOCK);
+//    FLAGS = fcntl(rejected_queue, F_GETFL);
+//    fcntl(rejected_queue, F_SETFL, FLAGS | O_NONBLOCK);
 
     ++program_state;
 

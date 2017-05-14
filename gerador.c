@@ -61,12 +61,10 @@ void * listenerThread(void * arg){
 			if (read_bytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
 			{
 				// Call would block (maybe wait a bit?)
-				fprintf(stdout, "foo");
 				continue;
 			}
 			else if (read_bytes > 0)
 			{
-				fprintf(stdout, "bar");
 				// Successfull call
 			}
 		}
@@ -94,13 +92,14 @@ void * listenerThread(void * arg){
 				}
 				else if (read_bytes > 0)
 				{
-					// Successfull call
+					// Successful call
 				}
 			}
 			while (message_buffer[buffer_pos] != '-' ? (++buffer_pos, 1) : 0);
 
 			message_buffer[buffer_pos] = '\0';
 			dur = strtoul(&message_buffer[0], NULL, 10);
+			
 			
 
 			read(readFIFO, &message_buffer[0], 2);
@@ -137,7 +136,7 @@ void * listenerThread(void * arg){
 
 			    pthread_mutex_lock(&registry_mutex);
 
-			    clock_gettime(CLOCK_MONOTONIC, &timespec);
+			    clock_gettime(CLOCK_REALTIME, &timespec);
 			    inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
 			    fprintf(file,"%-10.2f - %-10d - %-10lu:%-1c - %-10lu - %-15s\n", inst, (int)getpid(), p , g, dur,"REJEITADO");
@@ -145,7 +144,7 @@ void * listenerThread(void * arg){
 			    pthread_mutex_unlock(&registry_mutex);
 
 			    messageLength= sprintf(message, "%lu-%c-%lu-%lu/",p,g,dur,rejections);
-			    write(writeFIFO,message,messageLength+1);
+			    write(writeFIFO,message,messageLength);
 
 			}
 
@@ -156,16 +155,12 @@ void * listenerThread(void * arg){
 	unlink(PATH_REQUEST_QUEUE);
 	unlink(PATH_REJECTED_QUEUE);
 
-	 pthread_mutex_lock(&registry_mutex);
+	fprintf(file,"Total Gerados:%d - F:%d - M:%d\nTotal Rejeitados:%d - F:%d - M:%d\nTotal Descartados:%d - F:%d - M:%d",
+			pedidosGeradosHomem+pedidosGeradosMulher,pedidosGeradosMulher, pedidosGeradosHomem,
+			pedidosRejeitadosHomem+pedidosRejeitadosMulher,pedidosRejeitadosMulher,pedidosRejeitadosHomem,
+			pedidosDescartadosHomem+pedidosDescartadosMulher,pedidosDescartadosMulher,pedidosDescartadosHomem);
 
-	 fprintf(file,"Total Gerados:%d - F:%d - M:%d\nTotal Rejeitados:%d - F:%d - M:%d\nTotal Descartados:%d - F:%d - M:%d",
-			 pedidosGeradosHomem+pedidosGeradosMulher,pedidosGeradosMulher, pedidosGeradosHomem,
-			 pedidosRejeitadosHomem+pedidosRejeitadosMulher,pedidosRejeitadosMulher,pedidosRejeitadosHomem,
-			 pedidosDescartadosHomem+pedidosDescartadosMulher,pedidosDescartadosMulher,pedidosDescartadosHomem);
-
-	 fclose(file);
-
-	 pthread_mutex_unlock(&registry_mutex);
+	fclose(file);
 
 	return NULL;
 }
@@ -198,11 +193,11 @@ void * geraPedidos(void * arg){
 
 	messageLength= sprintf(message, "%d-%c-%d-0/", serial,gender,time);
 
-    write(writeFIFO,message,messageLength+1);
+	pthread_mutex_lock(&registry_mutex);
 
-    pthread_mutex_lock(&registry_mutex);
+    write(writeFIFO,message,messageLength);
 
-    clock_gettime(CLOCK_MONOTONIC, &timespec);
+    clock_gettime(CLOCK_REALTIME, &timespec);
     inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
 
     fprintf(file,"%-10.2f - %-10d - %-10d:%-1c - %-10d - %-15s\n", inst, (int) getpid(), serial, gender, time,"PEDIDO");
