@@ -204,19 +204,19 @@ int main(int argc, char ** argv){
 	clock_gettime(CLOCK_REALTIME, &start_inst);
 
 	if (argc != 3)
-	    {
-	        fprintf(stdout, "Usage: ./gerador <n. pedidos> <max. utilização>\n");
-	        return 0;
-	    }
+	{
+		fprintf(stdout, "Usage: ./gerador <n. pedidos> <max. utilização>\n");
+		return 0;
+	}
 
 	numPedidos = strtoul(argv[1], NULL, 10);
 	maxUtilizacao = strtoul(argv[2], NULL, 10);
 
-	    if (numPedidos == 0 || numPedidos == ULONG_MAX || maxUtilizacao == 0 || maxUtilizacao == ULONG_MAX)
-	    {
-	        fprintf(stderr, "Invalid argument! Must be an integer greater than 0 and lesser than %lu", ULONG_MAX);
-	        return 1; // Runtime error - user failure
-	    }
+	if (numPedidos == 0 || numPedidos == ULONG_MAX || maxUtilizacao == 0 || maxUtilizacao == ULONG_MAX)
+	{
+		fprintf(stderr, "Invalid argument! Must be an integer greater than 0 and lesser than %lu", ULONG_MAX);
+		return 1; // Runtime error - user failure
+	}
 
 	char filename[BUFFER_SIZE];
 	sprintf(filename,"/tmp/ger.%d",(int)getpid());
@@ -224,8 +224,8 @@ int main(int argc, char ** argv){
 
 	pthread_t ta, tb;
 	
-	while(access(PATH_REQUEST_QUEUE, F_OK) == -1){}
-	while(access(PATH_REJECTED_QUEUE, F_OK) == -1){}
+	while(access(PATH_REQUEST_QUEUE, F_OK) == -1);
+	while(access(PATH_REJECTED_QUEUE, F_OK) == -1);
 	
 	writeFIFO = open(PATH_REQUEST_QUEUE, O_WRONLY);
 	readFIFO = open(PATH_REJECTED_QUEUE, O_RDONLY);

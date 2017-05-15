@@ -66,7 +66,7 @@ void cleanup()
 {
     if (received_messages_total > 0)
     {
-        fprintf(registry_file, "Total Recebidos:%lu - F:%lu - M:%lu\n Total Rejeitados:%lu - F:%lu - M:%lu\n Total Servidos:%lu - F:%lu - M:%lu\n",
+        fprintf(registry_file, "Total Recebidos:%lu - F:%lu - M:%lu\nTotal Rejeitados:%lu - F:%lu - M:%lu\nTotal Servidos:%lu - F:%lu - M:%lu\n",
                 received_messages_total, received_messages_F, received_messages_M,
                 rejected_messages_total, rejected_messages_F, rejected_messages_M,
                 served_messages_total, served_messages_F, served_messages_M);
