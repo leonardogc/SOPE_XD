@@ -13,7 +13,7 @@
 #define BUFFER_SIZE 1024
 
 typedef struct timespec timespec_t;
-time_t start_inst;
+timespec_t start_inst;
 
 unsigned long numPedidos;
 unsigned long maxUtilizacao;
@@ -45,28 +45,17 @@ void * listenerThread(void * arg){
 	int messageLength;
 	char message[BUFFER_SIZE];
 
-
-	timespec_t timespec;
+	timespec_t this_inst;
 
 	while(counter<numPedidos){
 
 		unsigned int buffer_pos = 0;
 
-		int read_bytes;
 		char message_buffer[BUFFER_SIZE];
 
 		do
 		{
-			read_bytes = read(readFIFO, &message_buffer[buffer_pos], 1);
-			if (read_bytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-			{
-				// Call would block (maybe wait a bit?)
-				continue;
-			}
-			else if (read_bytes > 0)
-			{
-				// Successfull call
-			}
+			read(readFIFO, &message_buffer[buffer_pos], 1);
 		}
 		while (message_buffer[buffer_pos] != '-' ? (++buffer_pos, 1) : 0);
 
@@ -84,23 +73,12 @@ void * listenerThread(void * arg){
 
 			do
 			{
-				read_bytes = read(readFIFO, &message_buffer[buffer_pos], 1);
-				if (read_bytes < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-				{
-					// Call would block (maybe wait a bit?)
-					continue;
-				}
-				else if (read_bytes > 0)
-				{
-					// Successful call
-				}
+				read(readFIFO, &message_buffer[buffer_pos], 1);
 			}
 			while (message_buffer[buffer_pos] != '-' ? (++buffer_pos, 1) : 0);
 
 			message_buffer[buffer_pos] = '\0';
 			dur = strtoul(&message_buffer[0], NULL, 10);
-			
-			
 
 			read(readFIFO, &message_buffer[0], 2);
 			message_buffer[1] = '\0';
@@ -117,10 +95,11 @@ void * listenerThread(void * arg){
 
 			    pthread_mutex_lock(&registry_mutex);
 
-			    clock_gettime(CLOCK_MONOTONIC, &timespec);
-			    inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
+			    clock_gettime(CLOCK_REALTIME, &this_inst);
+   				inst = (this_inst.tv_sec - start_inst.tv_sec) * 1.0e3 +
+						(float) (this_inst.tv_nsec - start_inst.tv_nsec) / 1.0e6;
 
-			    fprintf(file,"%-10.2f - %-10d - %-10lu:%-1c - %-10lu - %-15s\n", inst, (int)getpid(), p , g, dur,"DESCARTADO");
+			    fprintf(file,"%-10.2f - %-10d - %-10lu:%-1c - %-10lu - %-10s\n", inst, (int)getpid(), p , g, dur,"DESCARTADO");
 
 			    pthread_mutex_unlock(&registry_mutex);
 
@@ -136,10 +115,11 @@ void * listenerThread(void * arg){
 
 			    pthread_mutex_lock(&registry_mutex);
 
-			    clock_gettime(CLOCK_REALTIME, &timespec);
-			    inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
+			    clock_gettime(CLOCK_REALTIME, &this_inst);
+    			inst = (this_inst.tv_sec - start_inst.tv_sec) * 1.0e3 +
+						(float) (this_inst.tv_nsec - start_inst.tv_nsec) / 1.0e6;
 
-			    fprintf(file,"%-10.2f - %-10d - %-10lu:%-1c - %-10lu - %-15s\n", inst, (int)getpid(), p , g, dur,"REJEITADO");
+			    fprintf(file,"%-10.2f - %-10d - %-10lu:%-1c - %-10lu - %-10s\n", inst, (int)getpid(), p , g, dur,"REJEITADO");
 
 			    pthread_mutex_unlock(&registry_mutex);
 
@@ -174,9 +154,8 @@ void * geraPedidos(void * arg){
 	char message[BUFFER_SIZE];
 	char gender;
 	int counter=0;
-	timespec_t timespec;
-
-
+	timespec_t this_inst;
+	
 	while(counter<numPedidos)
 	{
 
@@ -197,10 +176,11 @@ void * geraPedidos(void * arg){
 
     write(writeFIFO,message,messageLength);
 
-    clock_gettime(CLOCK_REALTIME, &timespec);
-    inst = ((float) timespec.tv_nsec / 1.0e6) - start_inst;
+    clock_gettime(CLOCK_REALTIME, &this_inst);
+    inst = (this_inst.tv_sec - start_inst.tv_sec) * 1.0e3 +
+			(float) (this_inst.tv_nsec - start_inst.tv_nsec) / 1.0e6;
 
-    fprintf(file,"%-10.2f - %-10d - %-10d:%-1c - %-10d - %-15s\n", inst, (int) getpid(), serial, gender, time,"PEDIDO");
+    fprintf(file,"%-10.2f - %-10d - %-10d:%-1c - %-10d - %-10s\n", inst, (int) getpid(), serial, gender, time,"PEDIDO");
 
     pthread_mutex_unlock(&registry_mutex);
 
@@ -221,7 +201,7 @@ void * geraPedidos(void * arg){
 
 int main(int argc, char ** argv){
 
-	start_inst = time(NULL) * 1000;
+	clock_gettime(CLOCK_REALTIME, &start_inst);
 
 	if (argc != 3)
 	    {

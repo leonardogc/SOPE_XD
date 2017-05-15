@@ -6,7 +6,6 @@
 #include <errno.h>
 
 #include <unistd.h>
-#include <signal.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <sys/types.h>
@@ -20,9 +19,11 @@
 
 unsigned int program_state = 0;
 
+typedef struct timespec timespec_t;
+
 pid_t this_process;
 pthread_t this_thread;
-time_t start_inst;
+timespec_t start_inst;
 
 char PATH_REGISTRY_FILE[BUFFER_SIZE];
 char * PATH_REQUEST_QUEUE = "/tmp/entrada";
@@ -65,7 +66,7 @@ void cleanup()
 {
     if (received_messages_total > 0)
     {
-        fprintf(registry_file, "Received:%lu-F:%lu-M:%lu\nRejected:%lu-F:%lu-M:%lu\nServed:%lu-F:%lu-M:%lu\n",
+        fprintf(registry_file, "Total Recebidos:%lu - F:%lu - M:%lu\n Total Rejeitados:%lu - F:%lu - M:%lu\n Total Servidos:%lu - F:%lu - M:%lu\n",
                 received_messages_total, received_messages_F, received_messages_M,
                 rejected_messages_total, rejected_messages_F, rejected_messages_M,
                 served_messages_total, served_messages_F, served_messages_M);
@@ -86,27 +87,25 @@ void cleanup()
     }
 }
 
-void signal_cleanup(int signo)
-{
-    cleanup();
-    
-    pthread_exit(NULL);
-}
-
 void * thread_wait(void * msg)
 {
-    struct timespec ts;
+    timespec_t this_inst;
 
     message_t * message = (message_t *) msg;
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-
-    sleep((message->dur - ((ts.tv_nsec / 1.0e6 - start_inst) - message->inst)) / 1.0e3);
+    clock_gettime(CLOCK_REALTIME, &this_inst);
+    unsigned int elapsed = ((this_inst.tv_sec - start_inst.tv_sec) * 1.0e3 +
+                            (float) (this_inst.tv_nsec - start_inst.tv_nsec) / 1.0e6) - message->inst;
+    if (elapsed < message->dur)
+    {
+        sleep((message->dur - elapsed) / 1.0e3);
+    }
 
     pthread_mutex_lock(&registry_mutex);
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
+    clock_gettime(CLOCK_REALTIME, &this_inst);
+    message->inst = (this_inst.tv_sec - start_inst.tv_sec) * 1.0e3 +
+                    (float) (this_inst.tv_nsec - start_inst.tv_nsec) / 1.0e6;
     message->tid = pthread_self();
     message->tip = SERVED;
 
@@ -136,7 +135,7 @@ void listener()
 {
     fprintf(stdout, "Listening...\n");
 
-    struct timespec ts;
+    timespec_t this_inst;
 
     int valid = 1;
     while (valid)
@@ -148,7 +147,6 @@ void listener()
 
         size_t buffer_pos = 0;
 
-        int read_bytes;
         int write_bytes;
         char message_buffer[BUFFER_SIZE];
 
@@ -165,12 +163,8 @@ void listener()
         message_buffer[buffer_pos] = '\0';
         message->p = strtoul(message_buffer, NULL, 10);
 
-        fprintf(stdout, "%lu\n", message->p);
-
         read(request_queue, message_buffer, 2);
         message->g = message_buffer[buffer_pos = 0];
-
-        fprintf(stdout, "%c\n", message->g);
 
         do
         {
@@ -185,20 +179,17 @@ void listener()
         message_buffer[buffer_pos] = '\0';
         message->dur = strtoul(message_buffer, NULL, 10);
 
-        fprintf(stdout, "%u\n", message->dur);
-
         read(request_queue, message_buffer, 2);
         message_buffer[1] = '\0';
         unsigned long rejections = strtoul(message_buffer, NULL, 10);
-
-        fprintf(stdout, "%lu\n", rejections);
 
         message->tip = RECEIVED;
 
         pthread_mutex_lock(&registry_mutex);
 
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
+        clock_gettime(CLOCK_REALTIME, &this_inst);
+        message->inst = (this_inst.tv_sec - start_inst.tv_sec) * 1.0e3 +
+                        (float) (this_inst.tv_nsec - start_inst.tv_nsec) / 1.0e6;
 
         fprintf(registry_file, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
                 message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
@@ -220,8 +211,9 @@ void listener()
             ++current_seats;
             current_gender = message->g;
 
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
+            clock_gettime(CLOCK_REALTIME, &this_inst);
+            message->inst = (this_inst.tv_sec - start_inst.tv_sec) * 1.0e3 +
+                            (float) (this_inst.tv_nsec - start_inst.tv_nsec) / 1.0e6;
 
             if (pthread_create(&thread, NULL, thread_wait, (void *) message) != 0 || pthread_detach(thread) != 0)
             {
@@ -237,8 +229,9 @@ void listener()
 
             message->tip = REJECTED;
 
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            message->inst = ((float) ts.tv_nsec / 1.0e6) - start_inst;
+            clock_gettime(CLOCK_REALTIME, &this_inst);
+            message->inst = (this_inst.tv_sec - start_inst.tv_sec) * 1.0e3 +
+                            (float) (this_inst.tv_nsec - start_inst.tv_nsec) / 1.0e6;
 
             fprintf(registry_file, "%-10.2f - %-10lu - %-10lu - %-10lu: %c - %-10u - %-10s\n", 
                     message->inst, (unsigned long) message->pid, (unsigned long) message->tid, message->p, message->g, message->dur, message->tip);
@@ -251,14 +244,6 @@ void listener()
 
             write_bytes = snprintf(message_buffer, BUFFER_SIZE, "%lu-%c-%u-%lu/", message->p, message->g, message->dur, rejections);
             write_bytes = write(rejected_queue, message_buffer, write_bytes);
-/*            if (write_bytes <= 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
-            {
-                valid = 0; // FIFO read-side closed
-            }
-            else
-            {
-                // Successfull call
-            }*/
 
             free(message);
         }
@@ -269,14 +254,7 @@ void listener()
 
 int main(int argc, char ** argv)
 {
-    struct sigaction sa;
-    
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = signal_cleanup;
-    sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGQUIT, &sa, NULL);
-    sigaction(SIGTERM, &sa, NULL);
-    sigaction(SIGTSTP, &sa, NULL);
+    clock_gettime(CLOCK_REALTIME, &start_inst);
 
     atexit(cleanup);
 
@@ -288,7 +266,6 @@ int main(int argc, char ** argv)
 
     this_process = getpid();
     this_thread = pthread_self();
-    start_inst = time(NULL) * 1.0e3;
 
     snprintf(PATH_REGISTRY_FILE, BUFFER_SIZE, "/tmp/bal.%u", (unsigned int) this_process);
 
@@ -334,8 +311,6 @@ int main(int argc, char ** argv)
         fprintf(stderr, "Failed named pipe opening!\n");
         return 2;
     }
-//    int FLAGS = fcntl(request_queue, F_GETFL);
-//    fcntl(request_queue, F_SETFL, FLAGS | O_NONBLOCK);
 
     ++program_state;
 
@@ -345,8 +320,6 @@ int main(int argc, char ** argv)
         fprintf(stderr, "Failed named pipe opening!\n");
         return 2;
     }
-//    FLAGS = fcntl(rejected_queue, F_GETFL);
-//    fcntl(rejected_queue, F_SETFL, FLAGS | O_NONBLOCK);
 
     ++program_state;
 
