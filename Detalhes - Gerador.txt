@@ -1,0 +1,7 @@
+O comando de invocação do programa "gerador" é: ./gerador <n. pedidos> <max. utilização>
+onde <n. pedidos> é um inteiro maior que 0 representativo do número de pedidos, e onde <max. utilização> 
+é o tempo máximo possível de duração de utilização da sauna por um utilizador, em milisegundos.
+
+Os pedidos são gerados aleatoriamente pelo programa e mandados através de um named pipe, onde serão recebidos pelo programa "sauna";
+os pedidos rejeitados por este são recebidos e voltam a ser enviados pelo named pipe. Os pedidos podem ser rejeitados
+um máximo de 3 vezes, sendo descartados após atingirem esse limite.
