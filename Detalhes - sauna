@@ -1,6 +1,0 @@
-O comando de invocação do programa "sauna" é: ./sauna <n. lugares>
-onde <n. lugares> é um inteiro maior que 0 representativo do número máximo de lugares que a sauna tem.
-
-Este programa é responsável pela criação das FIFOs, que permitirão comunicação entre este e o programa "gerador".
-
-O programa envia mensagens para stdout sobre o seu estado atual, começando por uma mensagem de inicialização, e posteriormente de atividade, no caso de uma execução normal. Se ocorrer algum erro, mensagens serão enviadas para stderr, e o programa retornará um código de erro (valor diferente de 0).
