@@ -224,6 +224,9 @@ int main(int argc, char ** argv){
 
 	pthread_t ta, tb;
 	
+	while(access(PATH_REQUEST_QUEUE, F_OK) == -1){}
+	while(access(PATH_REJECTED_QUEUE, F_OK) == -1){}
+	
 	writeFIFO = open(PATH_REQUEST_QUEUE, O_WRONLY);
 	readFIFO = open(PATH_REJECTED_QUEUE, O_RDONLY);
 
