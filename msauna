@@ -1,0 +1,4 @@
+# Makefile for sauna
+
+sauna: sauna.c
+	gcc sauna.c -pthread -Wall -Werror -o sauna
