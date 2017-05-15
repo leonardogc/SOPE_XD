@@ -1,0 +1,4 @@
+# Makefile for gerador
+
+sauna: gerador.c
+	gcc -o gerador gerador.c -I -pthread
