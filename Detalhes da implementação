@@ -1,0 +1,7 @@
+	Os acessos concorrentes ocorreram apenas nos ficheiros de mensagens de registo, pelo que a utilização de um mutex global (um para cada programa: gerador e sauna) foi suficiente para impedir quaisquer problemas de sincronização. Adicionalmente, foi utilizada uma condition variable no programa da sauna de modo a notificar a main thread quando houvesse um lugar disponível.
+
+Leonardo Gomes Capozzi - up201503708
+Ricardo José Santos Pereira - up201503716
+Ricardo Miguel Oliveira Rodrigues de Carvalho - up201503717
+
+
